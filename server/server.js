@@ -1,40 +1,52 @@
 import http from "http";
 import express from "express";
 import cors from "cors";
-import { Server } from "socket.io"; // Correct import for socket.io
+import { Server } from "socket.io";
 
 const app = express();
 
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "*", // Replace with specific origins in production
     methods: ["GET", "POST"],
   },
 });
 
-const clients = [];
+let clients = [];
 
 // Handle incoming socket connections
 io.on("connection", (socket) => {
-  console.log("A user connected");
+  console.log("A user connected with socket id:", socket.id);
 
-  socket.on("loc-res", ({ l1, l2, name }) => {
+  socket.on("loc-res", ({ l1, l2, username, profileUrl }) => {
     const existing = clients.find((co) => co.id === socket.id);
     if (existing) {
+      // Update existing client's location and profile URL
       existing.l1 = l1;
       existing.l2 = l2;
     } else {
-      let newC = { id: socket.id, l1: l1, l2: l2, name: name };
-      clients.push(newC);
+      // Add new client
+      let newClient = {
+        id: socket.id,
+        l1: l1,
+        l2: l2,
+        username: username,
+        profileUrl: profileUrl,
+      };
+      clients.push(newClient);
     }
-    console.log(l1, " <--> ", l2);
-    io.emit("allLocations", clients);
+    console.log(l1, " <<--->> ", l2);
+    clients.map((item) => {
+      console.log(item.username);
+    });
+    io.emit("allLocations", clients); // Send updated locations and profile URLs to all clients
   });
 
-  // Handle disconnection
   socket.on("disconnect", () => {
     console.log("User disconnected");
+    clients = clients.filter((client) => client.id !== socket.id); // Remove disconnected client
+    io.emit("allLocations", clients); // Update all clients with the current locations
   });
 });
 
