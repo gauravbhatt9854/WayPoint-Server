@@ -43,6 +43,21 @@ io.on("connection", (socket) => {
     io.emit("allLocations", clients); // Send updated locations and profile URLs to all clients
   });
 
+  socket.on("chatMessage", (message) => {
+    const sender = clients.find((client) => client.id === socket.id);
+    if (sender) {
+      const chatData = {
+        username: sender.username,
+        message: message,
+        profileUrl: sender.profileUrl,
+        timestamp: new Date(),
+      };
+      console.log("chat rec in backend");
+      socket.broadcast.emit("newChatMessage", chatData); // Broadcast message to everyone except the sender
+      console.log(`Message from ${sender.username}: ${message}`);
+    }
+  });
+
   socket.on("disconnect", () => {
     console.log("User disconnected");
     clients = clients.filter((client) => client.id !== socket.id); // Remove disconnected client
