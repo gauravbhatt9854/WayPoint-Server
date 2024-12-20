@@ -19,6 +19,15 @@ let clients = [];
 io.on("connection", (socket) => {
   console.log("A user connected with socket id:", socket.id);
 
+  socket.emit('setCookie', {
+    name: 'userSession',
+    value: "server-01",   // Example value
+    options: {
+      httpOnly: true,
+      maxAge: 60 * 60 * 24 * 7,  // 7 days
+    }
+  });
+
   socket.on("loc-res", ({ l1, l2, username, profileUrl }) => {
     const existing = clients.find((co) => co.id === socket.id);
     if (existing) {
