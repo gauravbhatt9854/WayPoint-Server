@@ -7,17 +7,17 @@ dotenv.config();
 const allowedOrigins = process.env.CLIENT_ORIGINS.split(",");
 const PORT = process.env.PORT || 8000;
 
-// app.use(cors({
-//   origin: (origin, callback) => {
-//     if (allowedOrigins.includes(origin) || !origin) {
-//       callback(null, true);
-//     } else {
-//       callback(new Error('Not allowed by CORS'));
-//     }
-//   }
-// }));
+app.use(cors({
+  origin: (origin, callback) => {
+    if (allowedOrigins.includes(origin) || !origin) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+}));
 
-app.use(cors())
+// app.use(cors())
 app.use(bodyParser.json());
 dotenv.config();
 
