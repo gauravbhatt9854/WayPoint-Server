@@ -54,6 +54,9 @@ io.on("connection", (socket) => {
     locationChanged = true; // Mark the location as changed
     console.log(`New client added: ${username} - ${l1}, ${l2}`);
   }
+    if (locationChanged) {
+    io.emit("allLocations", clients); // Send updated locations and profile URLs to all clients
+  }
   })
 
   socket.on("chatMessage", (message) => {
