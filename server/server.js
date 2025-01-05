@@ -29,28 +29,32 @@ io.on("connection", (socket) => {
   });
 
   socket.on("loc-res", ({ l1, l2, username, profileUrl }) => {
-    const existing = clients.find((co) => co.id === socket.id);
-    if (existing) {
-      // Update existing client's location and profile URL
+  const existing = clients.find((co) => co.id === socket.id);
+  let locationChanged = false; // Track whether the location has changed
+
+  if (existing) {
+    // Check if location has changed
+    if (existing.l1 !== l1 || existing.l2 !== l2) {
+      // Update existing client's location and profile URL if coordinates change
       existing.l1 = l1;
       existing.l2 = l2;
-    } else {
-      // Add new client
-      let newClient = {
-        id: socket.id,
-        l1: l1,
-        l2: l2,
-        username: username,
-        profileUrl: profileUrl,
-      };
-      clients.push(newClient);
+      locationChanged = true; // Mark the location as changed
+      console.log(`Location updated for ${username}: ${l1}, ${l2}`);
     }
-    console.log(l1, " <<--->> ", l2);
-    clients.map((item) => {
-      console.log(item.username);
-    });
-    io.emit("allLocations", clients); // Send updated locations and profile URLs to all clients
-  });
+  } else {
+    // Add new client if not found in the existing clients list
+    let newClient = {
+      id: socket.id,
+      l1: l1,
+      l2: l2,
+      username: username,
+      profileUrl: profileUrl,
+    };
+    clients.push(newClient);
+    locationChanged = true; // Mark the location as changed
+    console.log(`New client added: ${username} - ${l1}, ${l2}`);
+  }
+  })
 
   socket.on("chatMessage", (message) => {
     const sender = clients.find((client) => client.id === socket.id);
