@@ -28,35 +28,45 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("loc-res", ({ l1, l2, username, profileUrl }) => {
-  const existing = clients.find((co) => co.id === socket.id);
-  let locationChanged = false; // Track whether the location has changed
+  socket.on("register", ({ l1, l2, username, profileUrl }) => {
+    const existingClientIndex = clients.findIndex(client => client.id === socket.id);
+  
+    if (existingClientIndex !== -1) {
+      // Replace the existing client with updated information
+      clients[existingClientIndex] = {
+        id: socket.id,
+        l1: l1,
+        l2: l2,
+        username: username,
+        profileUrl: profileUrl,
+      };
+      console.log(`Updated client: ${username} at ${l1}, ${l2}`);
+    } else {
+      // Add a new client
+      let newClient = {
+        id: socket.id,
+        l1: l1,
+        l2: l2,
+        username: username,
+        profileUrl: profileUrl,
+      };
+      console.log(`New client added while register: ${username} at ${l1}, ${l2}`);
+      clients.push(newClient);
+    }
+  
+    // Emit the updated list of clients to all connected clients
+    io.emit("allUsers", clients);
+  });
+  
 
-  if (existing) {
-    // Check if location has changed
-    if (existing.l1 !== l1 || existing.l2 !== l2) {
-      // Update existing client's location and profile URL if coordinates change
+  socket.on("loc-res", ({ l1, l2 }) => {
+    const existing = clients.find((co) => co.id === socket.id);
+
+    if (existing) {
       existing.l1 = l1;
       existing.l2 = l2;
-      locationChanged = true; // Mark the location as changed
-      console.log(`Location updated for ${username}: ${l1}, ${l2}`);
     }
-  } else {
-    // Add new client if not found in the existing clients list
-    let newClient = {
-      id: socket.id,
-      l1: l1,
-      l2: l2,
-      username: username,
-      profileUrl: profileUrl,
-    };
-    clients.push(newClient);
-    locationChanged = true; // Mark the location as changed
-    console.log(`New client added: ${username} - ${l1}, ${l2}`);
-  }
-    if (locationChanged) {
-    io.emit("allLocations", clients); // Send updated locations and profile URLs to all clients
-  }
+    io.emit("allUsers", clients); // Send updated locations and profile URLs to all clients
   })
 
   socket.on("chatMessage", (message) => {
@@ -68,16 +78,16 @@ io.on("connection", (socket) => {
         profileUrl: sender.profileUrl,
         timestamp: new Date(),
       };
-      console.log("chat rec in backend");
       socket.broadcast.emit("newChatMessage", chatData); // Broadcast message to everyone except the sender
       console.log(`Message from ${sender.username}: ${message}`);
     }
+    else console.log("Message received from an unregistered");
   });
 
   socket.on("disconnect", () => {
     console.log("User disconnected");
     clients = clients.filter((client) => client.id !== socket.id); // Remove disconnected client
-    io.emit("allLocations", clients); // Update all clients with the current locations
+    io.emit("allUsers", clients); // Update all clients with the current locations
   });
 });
 
