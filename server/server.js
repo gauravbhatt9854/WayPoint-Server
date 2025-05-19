@@ -1,15 +1,23 @@
 import http from "http";
 import express from "express";
 import { Server } from "socket.io";
-import os from "os"; // Added missing import
+import os from "os";
 import { createRedisClients } from "../config/redis.js";
 
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = process.env.CLIENT_ORIGINS?.split(",") || [];
+
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: (origin, callback) => {
+      if (allowedOrigins.includes(origin) || !origin) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     methods: ["GET", "POST"],
   },
 });
@@ -17,10 +25,10 @@ const io = new Server(server, {
 const clientsKey = "socket:clients";
 
 (async () => {
-  const { pubClient } = await createRedisClients(); // Removed unused subClient
+  const { pubClient } = await createRedisClients();
 
   io.on("connection", (socket) => {
-    console.log("✅ A user connected with socket id:", socket.id);
+    console.log(`✅ A user connected with socket id: ${socket.id}`);
 
     socket.emit("setCookie", {
       name: "userSession",
@@ -33,8 +41,16 @@ const clientsKey = "socket:clients";
 
     socket.on("register", async ({ l1, l2, username, profileUrl }) => {
       try {
-        if (!username || typeof l1 !== "number" || typeof l2 !== "number") {
-          socket.emit("error", { message: "Invalid registration data" });
+        if (
+          !username?.trim() ||
+          typeof l1 !== "number" ||
+          typeof l2 !== "number" ||
+          l1 < -90 ||
+          l1 > 90 ||
+          l2 < -180 ||
+          l2 > 180
+        ) {
+          socket.emit("error", { message: "Invalid registration data or coordinates" });
           return;
         }
 
@@ -48,18 +64,7 @@ const clientsKey = "socket:clients";
 
         await pubClient.hset(clientsKey, socket.id, JSON.stringify(clientData));
         console.log(`🔐 Registered client: ${username} at ${l1}, ${l2}`);
-
-        const allClientsRaw = await pubClient.hvals(clientsKey);
-        const allClients = allClientsRaw
-          .map((c) => {
-            try {
-              return JSON.parse(c);
-            } catch {
-              return null;
-            }
-          })
-          .filter((c) => c !== null);
-        io.emit("allUsers", allClients);
+        io.emit("userUpdate", clientData); // Send only the new client
       } catch (error) {
         console.error(`❌ Error registering client: ${error.message}`);
         socket.emit("error", { message: "Failed to register client" });
@@ -68,6 +73,11 @@ const clientsKey = "socket:clients";
 
     socket.on("loc-res", async ({ l1, l2 }) => {
       try {
+        if (typeof l1 !== "number" || typeof l2 !== "number" || l1 < -90 || l1 > 90 || l2 < -180 || l2 > 180) {
+          socket.emit("error", { message: "Invalid coordinates" });
+          return;
+        }
+
         const rawClient = await pubClient.hget(clientsKey, socket.id);
         if (rawClient) {
           const client = JSON.parse(rawClient);
@@ -75,17 +85,7 @@ const clientsKey = "socket:clients";
           client.l2 = l2;
 
           await pubClient.hset(clientsKey, socket.id, JSON.stringify(client));
-          const allClientsRaw = await pubClient.hvals(clientsKey);
-          const allClients = allClientsRaw
-            .map((c) => {
-              try {
-                return JSON.parse(c);
-              } catch {
-                return null;
-              }
-            })
-            .filter((c) => c !== null);
-          io.emit("allUsers", allClients);
+          io.emit("userUpdate", client); // Send only the updated client
         }
       } catch (error) {
         console.error(`❌ Error updating location: ${error.message}`);
@@ -106,7 +106,7 @@ const clientsKey = "socket:clients";
           username: sender.username,
           message,
           profileUrl: sender.profileUrl,
-          timestamp: Date.now(), // Changed to Unix timestamp
+          timestamp: new Date().toISOString(),
         };
         socket.broadcast.emit("newChatMessage", chatData);
         console.log(`📨 Message from ${sender.username}: ${message}`);
@@ -117,20 +117,9 @@ const clientsKey = "socket:clients";
 
     socket.on("disconnect", async () => {
       try {
-        console.log("🚪 User disconnected:", socket.id);
+        console.log(`🚪 User disconnected: ${socket.id}`);
         await pubClient.hdel(clientsKey, socket.id);
-
-        const allClientsRaw = await pubClient.hvals(clientsKey);
-        const allClients = allClientsRaw
-          .map((c) => {
-            try {
-              return JSON.parse(c);
-            } catch {
-              return null;
-            }
-          })
-          .filter((c) => c !== null);
-        io.emit("allUsers", allClients);
+        io.emit("userRemoved", { id: socket.id }); // Notify clients of removal
       } catch (error) {
         console.error(`❌ Error handling disconnect: ${error.message}`);
       }
