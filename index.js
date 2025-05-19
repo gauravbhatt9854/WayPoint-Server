@@ -2,6 +2,7 @@ import { app, server } from "./server/server.js";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
 import cors from "cors";
+import os from 'os';
 
 dotenv.config();
 const allowedOrigins = process.env.CLIENT_ORIGINS.split(",");
@@ -22,7 +23,8 @@ app.use(bodyParser.json());
 dotenv.config();
 
 app.get("/", (req, res) => {
-  res.send("welcome to server");
+  const hostname = os.hostname(); // returns container's hostname
+  res.send(`Hello from ${hostname}`);
 });
 
 server.listen(PORT, () => {
