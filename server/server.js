@@ -11,13 +11,14 @@ const allowedOrigins = process.env.CLIENT_ORIGINS?.split(",") || [];
 
 const io = new Server(server, {
   cors: {
-    origin: (origin, callback) => {
-      if (allowedOrigins.includes(origin) || !origin) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    // origin: (origin, callback) => {
+    //   if (allowedOrigins.includes(origin) || !origin) {
+    //     callback(null, true);
+    //   } else {
+    //     callback(new Error("Not allowed by CORS"));
+    //   }
+    // },
+    origin:"*",
     methods: ["GET", "POST"],
   },
 });
