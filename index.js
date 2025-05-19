@@ -27,6 +27,6 @@ app.get("/", (req, res) => {
   res.send(`Hello from ${hostname}`);
 });
 
-server.listen(3000, '0.0.0.0', () => {
-  console.log('Server running');
+server.listen(PORT, '0.0.0.0', () => {
+  console.log('Server running at port : ' ,PORT );
 });
