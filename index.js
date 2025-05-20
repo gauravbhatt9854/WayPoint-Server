@@ -33,6 +33,6 @@ app.get("/", (req, res) => {
   res.send(`Welcome from ${hostname}`);
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running at port: ${PORT}`);
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
