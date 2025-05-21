@@ -3,6 +3,7 @@ import express from "express";
 import { Server } from "socket.io";
 import os from "os";
 import { createRedisClients } from "../config/redis.js";
+import { createAdapter } from "@socket.io/redis-adapter"; // 🆕 Import adapter
 
 const app = express();
 const server = http.createServer(app);
@@ -17,12 +18,12 @@ const io = new Server(server, {
 const clientsKey = "socket:clients";
 
 (async () => {
-  const { pubClient } = await createRedisClients();
+  const { pubClient, subClient } = await createRedisClients(); // 🆕 Get both clients
+  io.adapter(createAdapter(pubClient, subClient)); // 🆕 Use Redis adapter
 
   io.on("connection", async (socket) => {
     console.log(`✅ A user connected with socket id: ${socket.id}`);
 
-    // Emit full user list to the newly connected client
     const allClientsRaw = await pubClient.hvals(clientsKey);
     const allClients = allClientsRaw.map((item) => JSON.parse(item));
     socket.emit("allUsers", allClients);
@@ -59,11 +60,9 @@ const clientsKey = "socket:clients";
           profileUrl: profileUrl || "",
         };
 
-        // Save/update client data keyed by socket.id — no duplicates possible
         await pubClient.hset(clientsKey, socket.id, JSON.stringify(clientData));
         console.log(`🔐 Registered client: ${username} at ${l1}, ${l2}`);
 
-        // Emit updated full user list to all clients
         const allClientsRaw = await pubClient.hvals(clientsKey);
         const allClients = allClientsRaw.map((item) => JSON.parse(item));
         io.emit("allUsers", allClients);
@@ -95,7 +94,6 @@ const clientsKey = "socket:clients";
 
           await pubClient.hset(clientsKey, socket.id, JSON.stringify(client));
 
-          // Emit updated full user list
           const allClientsRaw = await pubClient.hvals(clientsKey);
           const allClients = allClientsRaw.map((item) => JSON.parse(item));
           io.emit("allUsers", allClients);
@@ -121,6 +119,7 @@ const clientsKey = "socket:clients";
           profileUrl: sender.profileUrl,
           timestamp: new Date().toISOString(),
         };
+
         socket.broadcast.emit("newChatMessage", chatData);
         console.log(`📨 Message from ${sender.username}: ${message}`);
       } catch (error) {
@@ -132,10 +131,8 @@ const clientsKey = "socket:clients";
       try {
         console.log(`🚪 User disconnected: ${socket.id}`);
 
-        // Remove client from Redis
         await pubClient.hdel(clientsKey, socket.id);
 
-        // Emit updated full user list
         const allClientsRaw = await pubClient.hvals(clientsKey);
         const allClients = allClientsRaw.map((item) => JSON.parse(item));
         io.emit("allUsers", allClients);
