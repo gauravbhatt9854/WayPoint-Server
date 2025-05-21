@@ -11,14 +11,7 @@ const allowedOrigins = process.env.CLIENT_ORIGINS?.split(",") || [];
 
 const io = new Server(server, {
   cors: {
-    // origin: (origin, callback) => {
-    //   if (allowedOrigins.includes(origin) || !origin) {
-    //     callback(null, true);
-    //   } else {
-    //     callback(new Error("Not allowed by CORS"));
-    //   }
-    // },
-    origin:"*",
+    origin: "*", // In production, replace with specific origins
     methods: ["GET", "POST"],
   },
 });
@@ -28,9 +21,10 @@ const clientsKey = "socket:clients";
 (async () => {
   const { pubClient } = await createRedisClients();
 
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
     console.log(`✅ A user connected with socket id: ${socket.id}`);
 
+    // Set cookie for debugging or tracking
     socket.emit("setCookie", {
       name: "userSession",
       value: os.hostname(),
@@ -39,6 +33,15 @@ const clientsKey = "socket:clients";
         maxAge: 60 * 60 * 24 * 7, // 7 days
       },
     });
+
+    // ➕ Send full user list to the newly connected client
+    try {
+      const allRawClients = await pubClient.hgetall(clientsKey);
+      const allClients = Object.values(allRawClients).map((c) => JSON.parse(c));
+      socket.emit("allUsers", allClients); // Only to new client
+    } catch (err) {
+      console.error("❌ Error sending full client list on connect:", err.message);
+    }
 
     socket.on("register", async ({ l1, l2, username, profileUrl }) => {
       try {
@@ -65,7 +68,11 @@ const clientsKey = "socket:clients";
 
         await pubClient.hset(clientsKey, socket.id, JSON.stringify(clientData));
         console.log(`🔐 Registered client: ${username} at ${l1}, ${l2}`);
-        io.emit("userUpdate", clientData); // Send only the new client
+
+        // 🔄 Emit full list to all clients (like Code 1)
+        const allRawClients = await pubClient.hgetall(clientsKey);
+        const allClients = Object.values(allRawClients).map((c) => JSON.parse(c));
+        io.emit("allUsers", allClients);
       } catch (error) {
         console.error(`❌ Error registering client: ${error.message}`);
         socket.emit("error", { message: "Failed to register client" });
@@ -86,7 +93,11 @@ const clientsKey = "socket:clients";
           client.l2 = l2;
 
           await pubClient.hset(clientsKey, socket.id, JSON.stringify(client));
-          io.emit("userUpdate", client); // Send only the updated client
+
+          // 🔄 Emit full list again to all clients (like Code 1)
+          const allRawClients = await pubClient.hgetall(clientsKey);
+          const allClients = Object.values(allRawClients).map((c) => JSON.parse(c));
+          io.emit("allUsers", allClients);
         }
       } catch (error) {
         console.error(`❌ Error updating location: ${error.message}`);
@@ -120,7 +131,11 @@ const clientsKey = "socket:clients";
       try {
         console.log(`🚪 User disconnected: ${socket.id}`);
         await pubClient.hdel(clientsKey, socket.id);
-        io.emit("userRemoved", { id: socket.id }); // Notify clients of removal
+
+        // 🔄 Emit updated list to all clients (like Code 1)
+        const allRawClients = await pubClient.hgetall(clientsKey);
+        const allClients = Object.values(allRawClients).map((c) => JSON.parse(c));
+        io.emit("allUsers", allClients);
       } catch (error) {
         console.error(`❌ Error handling disconnect: ${error.message}`);
       }
