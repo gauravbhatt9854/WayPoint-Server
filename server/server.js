@@ -3,40 +3,36 @@ import express from "express";
 import { Server } from "socket.io";
 import os from "os";
 import { createRedisClients } from "../config/redis.js";
-import { createAdapter } from "@socket.io/redis-adapter"; // 🆕 Import adapter
+import { createAdapter } from "@socket.io/redis-adapter";
 
 const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "*", // Allow all origins for testing; change to exact origins if you want to support credentials/cookies
     methods: ["GET", "POST"],
   },
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 const clientsKey = "socket:clients";
 
 (async () => {
-  const { pubClient, subClient } = await createRedisClients(); // 🆕 Get both clients
-  io.adapter(createAdapter(pubClient, subClient)); // 🆕 Use Redis adapter
+  const { pubClient, subClient } = await createRedisClients();
+
+  io.adapter(createAdapter(pubClient, subClient));
 
   io.on("connection", async (socket) => {
-    console.log(`✅ A user connected with socket id: ${socket.id}`);
+    console.log(`✅ User connected with socket id: ${socket.id}`);
 
+    // On connection send all current clients
     const allClientsRaw = await pubClient.hvals(clientsKey);
     const allClients = allClientsRaw.map((item) => JSON.parse(item));
     socket.emit("allUsers", allClients);
 
-    socket.emit("setCookie", {
-      name: "userSession",
-      value: os.hostname(),
-      options: {
-        httpOnly: true,
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-      },
-    });
-
+    // Listen for registration
     socket.on("register", async ({ l1, l2, username, profileUrl }) => {
       try {
         if (
@@ -63,9 +59,21 @@ const clientsKey = "socket:clients";
         await pubClient.hset(clientsKey, socket.id, JSON.stringify(clientData));
         console.log(`🔐 Registered client: ${username} at ${l1}, ${l2}`);
 
+        // Broadcast updated client list
         const allClientsRaw = await pubClient.hvals(clientsKey);
         const allClients = allClientsRaw.map((item) => JSON.parse(item));
         io.emit("allUsers", allClients);
+
+        // Send cookie-setting info to client
+        socket.emit("setCookie", {
+          name: "userSession",
+          value: os.hostname(),
+          options: {
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+            path: "/",
+          },
+        });
+
       } catch (error) {
         console.error(`❌ Error registering client: ${error.message}`);
         socket.emit("error", { message: "Failed to register client" });

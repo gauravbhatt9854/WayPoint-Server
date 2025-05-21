@@ -1,4 +1,4 @@
-import { app, server } from "./server/server.js";
+import {app , server} from './server/server.js'
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
 import cors from "cors";
@@ -15,14 +15,9 @@ if (!allowedOrigins.length) {
 
 app.use(
   cors({
-    // origin: (origin, callback) => {
-    //   if (allowedOrigins.includes(origin) || !origin) {
-    //     callback(null, true);
-    //   } else {
-    //     callback(new Error("Not allowed by CORS"));
-    //   }
-    // },
-    origin:"*",
+    origin: "*", // Allow all origins for testing; change if you want credentials/cookies
+    methods: ["GET", "POST"],
+    // credentials: true, // Uncomment only if you set a specific origin above
   })
 );
 
