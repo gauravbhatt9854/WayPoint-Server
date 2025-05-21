@@ -7,11 +7,9 @@ import { createRedisClients } from "../config/redis.js";
 const app = express();
 const server = http.createServer(app);
 
-const allowedOrigins = process.env.CLIENT_ORIGINS?.split(",") || [];
-
 const io = new Server(server, {
   cors: {
-    origin: "*", // In production, replace with specific origins
+    origin: "*",
     methods: ["GET", "POST"],
   },
 });
@@ -24,7 +22,11 @@ const clientsKey = "socket:clients";
   io.on("connection", async (socket) => {
     console.log(`✅ A user connected with socket id: ${socket.id}`);
 
-    // Set cookie for debugging or tracking
+    // Emit full user list to the newly connected client
+    const allClientsRaw = await pubClient.hvals(clientsKey);
+    const allClients = allClientsRaw.map((item) => JSON.parse(item));
+    socket.emit("allUsers", allClients);
+
     socket.emit("setCookie", {
       name: "userSession",
       value: os.hostname(),
@@ -33,15 +35,6 @@ const clientsKey = "socket:clients";
         maxAge: 60 * 60 * 24 * 7, // 7 days
       },
     });
-
-    // ➕ Send full user list to the newly connected client
-    try {
-      const allRawClients = await pubClient.hgetall(clientsKey);
-      const allClients = Object.values(allRawClients).map((c) => JSON.parse(c));
-      socket.emit("allUsers", allClients); // Only to new client
-    } catch (err) {
-      console.error("❌ Error sending full client list on connect:", err.message);
-    }
 
     socket.on("register", async ({ l1, l2, username, profileUrl }) => {
       try {
@@ -66,12 +59,13 @@ const clientsKey = "socket:clients";
           profileUrl: profileUrl || "",
         };
 
+        // Save/update client data keyed by socket.id — no duplicates possible
         await pubClient.hset(clientsKey, socket.id, JSON.stringify(clientData));
         console.log(`🔐 Registered client: ${username} at ${l1}, ${l2}`);
 
-        // 🔄 Emit full list to all clients (like Code 1)
-        const allRawClients = await pubClient.hgetall(clientsKey);
-        const allClients = Object.values(allRawClients).map((c) => JSON.parse(c));
+        // Emit updated full user list to all clients
+        const allClientsRaw = await pubClient.hvals(clientsKey);
+        const allClients = allClientsRaw.map((item) => JSON.parse(item));
         io.emit("allUsers", allClients);
       } catch (error) {
         console.error(`❌ Error registering client: ${error.message}`);
@@ -81,7 +75,14 @@ const clientsKey = "socket:clients";
 
     socket.on("loc-res", async ({ l1, l2 }) => {
       try {
-        if (typeof l1 !== "number" || typeof l2 !== "number" || l1 < -90 || l1 > 90 || l2 < -180 || l2 > 180) {
+        if (
+          typeof l1 !== "number" ||
+          typeof l2 !== "number" ||
+          l1 < -90 ||
+          l1 > 90 ||
+          l2 < -180 ||
+          l2 > 180
+        ) {
           socket.emit("error", { message: "Invalid coordinates" });
           return;
         }
@@ -94,9 +95,9 @@ const clientsKey = "socket:clients";
 
           await pubClient.hset(clientsKey, socket.id, JSON.stringify(client));
 
-          // 🔄 Emit full list again to all clients (like Code 1)
-          const allRawClients = await pubClient.hgetall(clientsKey);
-          const allClients = Object.values(allRawClients).map((c) => JSON.parse(c));
+          // Emit updated full user list
+          const allClientsRaw = await pubClient.hvals(clientsKey);
+          const allClients = allClientsRaw.map((item) => JSON.parse(item));
           io.emit("allUsers", allClients);
         }
       } catch (error) {
@@ -130,11 +131,13 @@ const clientsKey = "socket:clients";
     socket.on("disconnect", async () => {
       try {
         console.log(`🚪 User disconnected: ${socket.id}`);
+
+        // Remove client from Redis
         await pubClient.hdel(clientsKey, socket.id);
 
-        // 🔄 Emit updated list to all clients (like Code 1)
-        const allRawClients = await pubClient.hgetall(clientsKey);
-        const allClients = Object.values(allRawClients).map((c) => JSON.parse(c));
+        // Emit updated full user list
+        const allClientsRaw = await pubClient.hvals(clientsKey);
+        const allClients = allClientsRaw.map((item) => JSON.parse(item));
         io.emit("allUsers", allClients);
       } catch (error) {
         console.error(`❌ Error handling disconnect: ${error.message}`);
