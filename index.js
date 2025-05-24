@@ -1,4 +1,4 @@
-import {app , server} from './server/server.js'
+import {app , server} from "./server/server.js"
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
 import cors from "cors";

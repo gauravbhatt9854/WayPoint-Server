@@ -1,17 +1,25 @@
 import http from "http";
 import express from "express";
+import cors from "cors";
 import { Server } from "socket.io";
 import os from "os";
-import { createRedisClients } from "../config/redis.js";
+import { createRedisClients } from "../config/redis.js"; // ✅ your file
 import { createAdapter } from "@socket.io/redis-adapter";
 
 const app = express();
 const server = http.createServer(app);
 
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"],
+  credentials: true,
+}));
+
 const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
+    credentials: true,
   },
   pingTimeout: 60000,
   pingInterval: 25000,
@@ -22,34 +30,29 @@ const clientsKey = "socket:clients";
 (async () => {
   const { pubClient, subClient } = await createRedisClients();
 
-  io.adapter(createAdapter(pubClient, subClient));
+  io.adapter(createAdapter(pubClient, subClient)); // ✅ Redis adapter
 
   const broadcastClients = async () => {
     try {
-      const allClientsRaw = await pubClient.hvals(clientsKey);
-      const allClients = allClientsRaw.map((item) => JSON.parse(item));
-      io.emit("allUsers", allClients);
+      const rawClients = await pubClient.hvals(clientsKey);
+      const parsedClients = rawClients.map(JSON.parse);
+      io.emit("allUsers", parsedClients);
     } catch (err) {
-      console.error("🔁 Failed to broadcast clients", err);
+      console.error("🚨 Broadcast failed:", err);
     }
   };
 
-  setInterval(broadcastClients, 30000); // Re-broadcast every 30 seconds just in case
-
-  io.on("connection", async (socket) => {
-    console.log(`✅ Connected: ${socket.id}`);
-
-    await broadcastClients(); // sync client immediately
+  io.on("connection", (socket) => {
+    console.log(`🔗 Connected: ${socket.id}`);
+    broadcastClients();
 
     socket.on("register", async ({ l1, l2, username, profileUrl }) => {
       if (
         !username?.trim() ||
-        typeof l1 !== "number" ||
-        typeof l2 !== "number" ||
+        typeof l1 !== "number" || typeof l2 !== "number" ||
         l1 < -90 || l1 > 90 || l2 < -180 || l2 > 180
       ) {
-        socket.emit("error", { message: "Invalid registration data or coordinates" });
-        return;
+        return socket.emit("error", { message: "Invalid registration" });
       }
 
       const clientData = {
@@ -61,7 +64,6 @@ const clientsKey = "socket:clients";
       };
 
       await pubClient.hset(clientsKey, socket.id, JSON.stringify(clientData));
-      console.log(`🔐 Registered ${username} at ${l1},${l2}`);
       await broadcastClients();
 
       socket.emit("setCookie", {
@@ -72,44 +74,48 @@ const clientsKey = "socket:clients";
           path: "/",
         },
       });
+
+      console.log(`📝 Registered ${username} @ ${l1},${l2}`);
     });
 
     socket.on("loc-res", async ({ l1, l2 }) => {
       if (typeof l1 !== "number" || typeof l2 !== "number") return;
 
-      const rawClient = await pubClient.hget(clientsKey, socket.id);
-      if (rawClient) {
-        const client = JSON.parse(rawClient);
-        client.l1 = l1;
-        client.l2 = l2;
+      const raw = await pubClient.hget(clientsKey, socket.id);
+      if (!raw) return;
 
-        await pubClient.hset(clientsKey, socket.id, JSON.stringify(client));
-        await broadcastClients();
-      }
+      const client = JSON.parse(raw);
+      client.l1 = l1;
+      client.l2 = l2;
+
+      await pubClient.hset(clientsKey, socket.id, JSON.stringify(client));
+      await broadcastClients();
     });
 
     socket.on("chatMessage", async (message) => {
-      const rawClient = await pubClient.hget(clientsKey, socket.id);
-      if (!rawClient) {
-        socket.emit("error", { message: "Please register first." });
-        return;
+      const raw = await pubClient.hget(clientsKey, socket.id);
+      if (!raw) {
+        return socket.emit("error", { message: "Please register first" });
       }
 
-      const sender = JSON.parse(rawClient);
-      const chatData = {
+      const sender = JSON.parse(raw);
+      const chat = {
         username: sender.username,
-        message,
         profileUrl: sender.profileUrl,
+        message,
         timestamp: new Date().toISOString(),
       };
 
-      socket.broadcast.emit("newChatMessage", chatData);
+      socket.broadcast.emit("newChatMessage", chat);
     });
 
     socket.on("disconnect", async () => {
-      console.log(`🚪 Disconnected: ${socket.id}`);
+      console.log(`👋 Disconnected: ${socket.id}`);
       await pubClient.hdel(clientsKey, socket.id);
       await broadcastClients();
     });
   });
 })();
+
+
+export {app , server};
