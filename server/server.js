@@ -31,10 +31,16 @@ const clientsKey = "socket:clients";
   const { pubClient, subClient } = await createRedisClients();
   io.adapter(createAdapter(pubClient, subClient));
 
+  let broadcastTimeout;
+  const debounceBroadcast = () => {
+    if (broadcastTimeout) clearTimeout(broadcastTimeout);
+    broadcastTimeout = setTimeout(broadcastClients, 200);
+  };
+
   const broadcastClients = async () => {
     try {
       const rawClients = await pubClient.hvals(clientsKey);
-      const parsedClients = rawClients.map((raw) => {
+      const parsedClients = rawClients.map(raw => {
         try {
           return JSON.parse(raw);
         } catch {
@@ -47,18 +53,44 @@ const clientsKey = "socket:clients";
     }
   };
 
-  io.use(async (socket, next) => {
-    // Middleware to prevent unregistered clients from sending messages
-    socket.onAny(async (event, ...args) => {
-      if (event === "chatMessage") {
-        const exists = await pubClient.hexists(clientsKey, socket.id);
-        if (!exists) {
-          socket.emit("error", { message: "Please register first" });
+  const updateLastSeen = async (id) => {
+    try {
+      const raw = await pubClient.hget(clientsKey, id);
+      if (!raw) return false;
+      const client = JSON.parse(raw);
+      client.lastSeen = Date.now();
+      await pubClient.hset(clientsKey, id, JSON.stringify(client));
+      return true;
+    } catch {
+      await pubClient.hdel(clientsKey, id);
+      return false;
+    }
+  };
+
+  // 🔁 Cleanup stale clients every 60 seconds
+  setInterval(async () => {
+    try {
+      const allClients = await pubClient.hgetall(clientsKey);
+      const now = Date.now();
+      const threshold = 90 * 1000; // 90 seconds
+
+      for (const [id, raw] of Object.entries(allClients)) {
+        try {
+          const client = JSON.parse(raw);
+          if (!client.lastSeen || now - client.lastSeen > threshold) {
+            await pubClient.hdel(clientsKey, id);
+            console.log(`🧹 Removed stale client: ${id}`);
+          }
+        } catch {
+          await pubClient.hdel(clientsKey, id);
         }
       }
-    });
-    next();
-  });
+
+      await broadcastClients();
+    } catch (err) {
+      console.error("🧨 Cleanup error:", err);
+    }
+  }, 60000);
 
   io.on("connection", (socket) => {
     console.log(`🔗 Connected: ${socket.id}`);
@@ -79,10 +111,11 @@ const clientsKey = "socket:clients";
         l2,
         username: username.trim(),
         profileUrl: profileUrl || "",
+        lastSeen: Date.now(),
       };
 
       await pubClient.hset(clientsKey, socket.id, JSON.stringify(clientData));
-      await broadcastClients();
+      debounceBroadcast();
 
       socket.emit("setCookie", {
         name: "userSession",
@@ -99,32 +132,41 @@ const clientsKey = "socket:clients";
     socket.on("loc-res", async ({ l1, l2 }) => {
       if (typeof l1 !== "number" || typeof l2 !== "number") return;
 
-      const raw = await pubClient.hget(clientsKey, socket.id);
-      if (!raw) return;
+      try {
+        const raw = await pubClient.hget(clientsKey, socket.id);
+        if (!raw) return;
+        const client = JSON.parse(raw);
+        client.l1 = l1;
+        client.l2 = l2;
+        client.lastSeen = Date.now();
+        await pubClient.hset(clientsKey, socket.id, JSON.stringify(client));
+        debounceBroadcast();
+      } catch {
+        await pubClient.hdel(clientsKey, socket.id);
+      }
+    });
 
-      const client = JSON.parse(raw);
-      client.l1 = l1;
-      client.l2 = l2;
-
-      await pubClient.hset(clientsKey, socket.id, JSON.stringify(client));
-      await broadcastClients();
+    socket.on("heartbeat", async () => {
+      await updateLastSeen(socket.id);
     });
 
     socket.on("chatMessage", async (message) => {
-      const raw = await pubClient.hget(clientsKey, socket.id);
-      if (!raw) {
-        return socket.emit("error", { message: "Please register first" });
+      try {
+        const raw = await pubClient.hget(clientsKey, socket.id);
+        if (!raw) {
+          return socket.emit("error", { message: "Please register first" });
+        }
+        const sender = JSON.parse(raw);
+        const chat = {
+          username: sender.username,
+          profileUrl: sender.profileUrl,
+          message,
+          timestamp: new Date().toISOString(),
+        };
+        socket.broadcast.emit("newChatMessage", chat);
+      } catch {
+        await pubClient.hdel(clientsKey, socket.id);
       }
-
-      const sender = JSON.parse(raw);
-      const chat = {
-        username: sender.username,
-        profileUrl: sender.profileUrl,
-        message,
-        timestamp: new Date().toISOString(),
-      };
-
-      socket.broadcast.emit("newChatMessage", chat);
     });
 
     socket.on("disconnect", async () => {
@@ -132,6 +174,18 @@ const clientsKey = "socket:clients";
       await pubClient.hdel(clientsKey, socket.id);
       await broadcastClients();
     });
+  });
+
+  // Graceful shutdown
+  process.on("SIGINT", async () => {
+    console.log("🛑 Shutting down...");
+    try {
+      await pubClient.quit();
+      await subClient.quit();
+    } catch (err) {
+      console.error("Error during Redis shutdown:", err);
+    }
+    server.close(() => process.exit(0));
   });
 })();
 
