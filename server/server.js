@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import { Server } from "socket.io";
 import os from "os";
-import { createRedisClients } from "../config/redis.js"; // ✅ your file
+import { createRedisClients } from "../config/redis.js";
 import { createAdapter } from "@socket.io/redis-adapter";
 
 const app = express();
@@ -29,18 +29,36 @@ const clientsKey = "socket:clients";
 
 (async () => {
   const { pubClient, subClient } = await createRedisClients();
-
-  io.adapter(createAdapter(pubClient, subClient)); // ✅ Redis adapter
+  io.adapter(createAdapter(pubClient, subClient));
 
   const broadcastClients = async () => {
     try {
       const rawClients = await pubClient.hvals(clientsKey);
-      const parsedClients = rawClients.map(JSON.parse);
+      const parsedClients = rawClients.map((raw) => {
+        try {
+          return JSON.parse(raw);
+        } catch {
+          return null;
+        }
+      }).filter(Boolean);
       io.emit("allUsers", parsedClients);
     } catch (err) {
       console.error("🚨 Broadcast failed:", err);
     }
   };
+
+  io.use(async (socket, next) => {
+    // Middleware to prevent unregistered clients from sending messages
+    socket.onAny(async (event, ...args) => {
+      if (event === "chatMessage") {
+        const exists = await pubClient.hexists(clientsKey, socket.id);
+        if (!exists) {
+          socket.emit("error", { message: "Please register first" });
+        }
+      }
+    });
+    next();
+  });
 
   io.on("connection", (socket) => {
     console.log(`🔗 Connected: ${socket.id}`);
@@ -117,5 +135,4 @@ const clientsKey = "socket:clients";
   });
 })();
 
-
-export {app , server};
+export { app, server };
