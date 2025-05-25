@@ -104,7 +104,7 @@ const chatChannel = "chat:messages";
     if (channel === chatChannel) {
       try {
         const chat = JSON.parse(message);
-        io.emit("newChatMessage", chat);
+        io.local.emit("newChatMessage", chat); // ✅ emit only to local clients
       } catch (e) {
         console.error("📭 Invalid chat message:", e);
       }
@@ -124,7 +124,6 @@ const chatChannel = "chat:messages";
         return socket.emit("error", { message: "Invalid registration" });
       }
 
-      // Clean up previous data
       await pubClient.hdel(clientsKey, socket.id);
 
       const clientData = {
@@ -186,7 +185,7 @@ const chatChannel = "chat:messages";
           timestamp: new Date().toISOString(),
         };
 
-        // Send to Redis channel for all nodes to handle
+        // Publish message to Redis
         await pubClient.publish(chatChannel, JSON.stringify(chat));
       } catch {
         await pubClient.hdel(clientsKey, socket.id);
