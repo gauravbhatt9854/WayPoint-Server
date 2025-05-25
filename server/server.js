@@ -26,6 +26,7 @@ const io = new Server(server, {
 });
 
 const clientsKey = "socket:clients";
+const chatChannel = "chat:messages";
 
 (async () => {
   const { pubClient, subClient } = await createRedisClients();
@@ -40,13 +41,15 @@ const clientsKey = "socket:clients";
   const broadcastClients = async () => {
     try {
       const rawClients = await pubClient.hvals(clientsKey);
-      const parsedClients = rawClients.map(raw => {
-        try {
-          return JSON.parse(raw);
-        } catch {
-          return null;
-        }
-      }).filter(Boolean);
+      const parsedClients = rawClients
+        .map(raw => {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
       io.emit("allUsers", parsedClients);
     } catch (err) {
       console.error("🚨 Broadcast failed:", err);
@@ -72,7 +75,7 @@ const clientsKey = "socket:clients";
     try {
       const allClients = await pubClient.hgetall(clientsKey);
       const now = Date.now();
-      const threshold = 90 * 1000; // 90 seconds
+      const threshold = 90 * 1000;
 
       for (const [id, raw] of Object.entries(allClients)) {
         try {
@@ -92,6 +95,22 @@ const clientsKey = "socket:clients";
     }
   }, 60000);
 
+  // 📡 Listen for chat messages from Redis pub/sub
+  subClient.subscribe(chatChannel, (err) => {
+    if (err) console.error("❌ Failed to subscribe to chat channel:", err);
+  });
+
+  subClient.on("message", (channel, message) => {
+    if (channel === chatChannel) {
+      try {
+        const chat = JSON.parse(message);
+        io.emit("newChatMessage", chat);
+      } catch (e) {
+        console.error("📭 Invalid chat message:", e);
+      }
+    }
+  });
+
   io.on("connection", (socket) => {
     console.log(`🔗 Connected: ${socket.id}`);
     broadcastClients();
@@ -104,6 +123,9 @@ const clientsKey = "socket:clients";
       ) {
         return socket.emit("error", { message: "Invalid registration" });
       }
+
+      // Clean up previous data
+      await pubClient.hdel(clientsKey, socket.id);
 
       const clientData = {
         id: socket.id,
@@ -163,7 +185,9 @@ const clientsKey = "socket:clients";
           message,
           timestamp: new Date().toISOString(),
         };
-        socket.broadcast.emit("newChatMessage", chat);
+
+        // Send to Redis channel for all nodes to handle
+        await pubClient.publish(chatChannel, JSON.stringify(chat));
       } catch {
         await pubClient.hdel(clientsKey, socket.id);
       }
