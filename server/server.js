@@ -26,12 +26,12 @@ io.on("connection", (socket) => {
 
 
   // User registration
-  socket.on("register", ({ username, profileUrl , lat , lng }) => {
+  socket.on("register", ({ username, profileUrl}) => {
     clients[socket.id] = {
       username,
       profileUrl,
-      lat,
-      lng
+      lat:0,
+      lng:0
     };
     console.log(`👤 Registered: ${username}`);
   });
@@ -90,7 +90,9 @@ setInterval(() => {
   }));
 
   io.emit("allLocations", locations);
-}, 10000);
+  console.log("List of Registered User");
+  locations.map((user)=> console.log(user.username));
+}, 5000);
 
 // ────────────── HTTP ROUTES ──────────────
 
@@ -112,6 +114,7 @@ app.get("/clients", (req, res) => {
 app.post("/reset", (req, res) => {
   clients = {};
   io.emit("allLocations", []);
+  
   res.send("🔄 All clients have been reset.");
 });
 
