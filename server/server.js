@@ -24,15 +24,6 @@ let clients = {}; // { socketId: { username, profileUrl, lat, lng } }
 io.on("connection", (socket) => {
   console.log(`✅ User connected: ${socket.id}`);
 
-  // Optional: Send session cookie
-  socket.emit("setCookie", {
-    name: "userSession",
-    value: "server-01",
-    options: {
-      httpOnly: true,
-      maxAge: 60 * 60 * 24 * 7,
-    },
-  });
 
   // User registration
   socket.on("register", ({ username, profileUrl , lat , lng }) => {
@@ -74,7 +65,6 @@ io.on("connection", (socket) => {
 
     // Send to all except sender
     socket.broadcast.emit("newChatMessage", chatData);
-    console.log(`💬 ${sender.username}: ${message}`);
   });
 
   // Disconnect
