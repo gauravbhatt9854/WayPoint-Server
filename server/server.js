@@ -100,7 +100,6 @@ setInterval(() => {
   }));
 
   io.emit("allLocations", locations);
-  console.log("clients " , clients);
 }, 10000);
 
 // ────────────── HTTP ROUTES ──────────────
