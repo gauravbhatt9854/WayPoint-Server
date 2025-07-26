@@ -11,8 +11,8 @@ export function registerSocketHandlers(io) {
   io.on("connection", (socket) => {
     console.log(`✅ User connected: ${socket.id}`);
 
-    socket.on("register", ({ username, profileUrl }) => {
-      addClient(socket.id, { username, profileUrl });
+    socket.on("register", ({ username, profileUrl , lat , lng }) => {
+      addClient(socket.id, { username, profileUrl , lat , lng });
       console.log(`👤 Registered: ${username}`);
     });
 
@@ -59,5 +59,5 @@ export function registerSocketHandlers(io) {
     io.emit("allLocations", locations);
     console.log("List of Registered Users:");
     locations.forEach((user) => console.log(user.username));
-  }, 5000);
+  }, 60*1000);
 }

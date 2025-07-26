@@ -1,8 +1,8 @@
 // clients.js
 const clients = new Map();
 
-export function addClient(socketId, { username, profileUrl }) {
-  clients.set(socketId, { username, profileUrl, lat: 0, lng: 0 });
+export function addClient(socketId, { username, profileUrl , lat , lng }) {
+  clients.set(socketId, { username, profileUrl, lat, lng });
 }
 
 export function updateLocation(socketId, { lat, lng }) {
