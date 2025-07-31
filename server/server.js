@@ -15,12 +15,19 @@ app.use(cors());
 app.use(express.json());
 app.use("/", router);
 
-let AllowedUrl = process.env.CLIENT_ORIGINS.split(',');
+const AllowedUrl = process.env.CLIENT_ORIGINS.split(',');
 
 const io = new Server(server, {
   cors: {
-    origin: AllowedUrl || ["*"],
-    methods: ["GET", "POST"]
+    origin: function (origin, callback) {
+      if (!origin || AllowedUrl.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by Socket.IO CORS"));
+      }
+    },
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 

@@ -10,8 +10,16 @@ allowedOrigins = allowedOrigins.split(",");
 const PORT = process.env.PORT || 8000;
 
 app.use(cors({
-  origin: allowedOrigins || ["*"]
+  origin: function (origin, callback) {
+    if (!origin || AllowedUrl.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true
 }));
+
 
 
 app.use(bodyParser.json());
