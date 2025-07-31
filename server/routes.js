@@ -1,10 +1,9 @@
 // routes.js
 import express from "express";
 import { getAllClients, resetClients } from "./clients.js";
-
 const router = express.Router();
 
-router.get("/", (req, res) => {
+router.get("/api", (req, res) => {
   res.send("✅ Real-time location server is running!");
 });
 
