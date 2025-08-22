@@ -5,11 +5,15 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gauravbhatt9854/WayPoint-Server.git"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "keywords": [],
   "author": "",
@@ -20,9 +24,12 @@
   "homepage": "https://github.com/gauravbhatt9854/WayPoint-Server#readme",
   "description": "",
   "dependencies": {
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
+    "google-auth-library": "^10.2.1",
+    "jsonwebtoken": "^9.0.2",
     "socket.io": "^4.8.1"
   }
 }
