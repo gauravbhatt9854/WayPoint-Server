@@ -5,9 +5,11 @@ import {
   getClient,
   deleteClient,
   getAllClients,
+  updateUsername
 } from "./clients.js";
 
 export function registerSocketHandlers(io) {
+  
   io.on("connection", (socket) => {
     console.log(`✅ User connected: ${socket.id}`);
 
@@ -18,6 +20,7 @@ export function registerSocketHandlers(io) {
     // 💾 Handle registration
     socket.on("register", ({ username, profileUrl, lat, lng }) => {
       addClient(socket.id, { username, profileUrl, lat, lng });
+      
     });
 
     // 📍 Handle location updates
@@ -28,6 +31,14 @@ export function registerSocketHandlers(io) {
       }
       updateLocation(socket.id, { lat, lng });
     });
+
+
+    // update username
+    socket.on("update-username", (username) => {
+      console.log("Update name request : from " , socket.id , " and updated name : " , username);
+      updateUsername(socket.id, username);
+    })
+
 
     // 💬 Handle chat messages
     socket.on("chatMessage", (message) => {

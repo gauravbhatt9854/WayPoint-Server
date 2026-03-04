@@ -1,34 +1,31 @@
-// server.js
-import http from "http";
-import express from "express";
-import cors from "cors";
-import { Server } from "socket.io";
-import router from "./routes.js";
-import { registerSocketHandlers } from "./socketHandlers.js";
+import http from "http"
+import express from "express"
+import { Server } from "socket.io"
+import router from "./routes.js"
+import { registerSocketHandlers } from "./socketHandlers.js"
+import cors from 'cors';
 
-const app = express();
-const server = http.createServer(app);
+const app = express()
+const server = http.createServer(app)
 
-app.use(cors());
-app.use(express.json());
-app.use("/", router);
+const allowedOrigins = (process.env.CLIENT_ORIGINS || "").split(",")
 
-const allowedOrigins = (process.env.CLIENT_ORIGINS || "").split(',');
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
+
+app.use(express.json())
+app.use("/", router)
+
 
 const io = new Server(server, {
   cors: {
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by Socket.IO CORS"));
-      }
-    },
-    methods: ["GET", "POST"],
+    origin: allowedOrigins,
     credentials: true
   }
-});
+})
 
-registerSocketHandlers(io);
+registerSocketHandlers(io)
 
-export { app, server };
+export { app, server }

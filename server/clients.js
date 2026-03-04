@@ -36,3 +36,14 @@ export function getAllClients() {
 export function resetClients() {
   clients.clear();
 }
+
+export function updateUsername(socketId, username) {
+  const client = clients.get(socketId);
+
+  if (client) {
+    client.username = username;
+    console.log(`✏️ Username updated for ${socketId} → ${username}`);
+  } else {
+    console.log(`⚠️ Client not found for socketId: ${socketId}`);
+  }
+}
