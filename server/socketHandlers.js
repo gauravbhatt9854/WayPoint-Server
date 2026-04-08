@@ -77,7 +77,6 @@ export function registerSocketHandlers(io) {
     if (locations.length > 0) {
       io.emit("allLocations", locations);
       console.log("📡 Broadcasting registered clients:");
-      locations.forEach((user) => console.log(user.username));
     }
   }, 10 * 1000);
 }

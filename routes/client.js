@@ -1,6 +1,6 @@
 // routes.js
 import express from "express";
-import { getAllClients, resetClients } from "./clients.js";
+import { getAllClients, resetClients } from "../server/clients.js";
 const router = express.Router();
 
 router.get("/api", (req, res) => {
